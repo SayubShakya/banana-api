@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Banana Game - Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/play.html">🍌 Banana Game</a>
+    <nav>
+      <a href="/play.html">Play</a>
+      <a href="/leaderboard.html">Leaderboard</a>
+      <span id="nav-user" class="nav-user"></span>
+    </nav>
+  </header>
+
+  <main class="card">
+    <h1>Users</h1>
+    <table class="data-table">
+      <thead>
+        <tr><th>ID</th><th>Username</th><th>Role</th><th>Games</th><th>Best</th><th></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="message" class="message" role="status"></p>
+  </main>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
