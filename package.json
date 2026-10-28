@@ -1,0 +1,20 @@
+{
+  "name": "banana-brigade",
+  "version": "0.1.0",
+  "description": "Banana Brigade: a 2D jetpack shooter where Banana API puzzles deploy, revive and arm your soldier.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "author": "Sayub Shakya",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
