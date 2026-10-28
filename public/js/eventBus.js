@@ -2,7 +2,7 @@
 // Game logic emits events such as "answer:correct"; UI parts subscribe to them.
 // The emitter does not need to know who is listening, which keeps parts decoupled.
 //
-// Scaffolding written with Claude (Anthropic), Oct 2026; reviewed by Sayub Shakya.
+// Written with help from a generative AI coding assistant; reviewed by Sayub Shakya.
 
 const listeners = new Map();
 

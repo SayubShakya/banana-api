@@ -1,33 +1,22 @@
-// Entry point: reads settings from the environment (.env), opens the database
-// and starts the web server.
+// Entry point: reads settings from the environment and starts the server.
 //
-// Scaffolding written with Claude (Anthropic), Oct 2026; reviewed by Sayub Shakya.
+// Written with help from a generative AI coding assistant; reviewed by Sayub Shakya.
 
-const crypto = require('node:crypto');
-const path = require('node:path');
 const { createApp } = require('./app');
-const { openDatabase } = require('./db/database');
-const { createBananaApi } = require('./services/bananaApi');
+const { createPuzzlePool } = require('./pool');
+const { createBananaApi, DEFAULT_BASE_URL } = require('./services/bananaApi');
 
-const PORT = Number(process.env.PORT) || 3000;
-const production = process.env.NODE_ENV === 'production';
-const DB_FILE = process.env.DB_FILE || path.join(__dirname, '..', 'data', 'banana.db');
+const PORT = Number(process.env.PORT) || 3100;
 
-let sessionSecret = process.env.SESSION_SECRET;
-if (!sessionSecret || sessionSecret === 'change-me') {
-  if (production) {
-    console.error('SESSION_SECRET must be set in production. See .env.example');
-    process.exit(1);
-  }
-  // Fine for local development; everyone is logged out when the server restarts.
-  sessionSecret = crypto.randomBytes(32).toString('hex');
-  console.warn('SESSION_SECRET not set - using a random one for this run.');
-}
+// Point BANANA_API_URL at a broken address to demonstrate the error handling.
+const baseUrl = process.env.BANANA_API_URL || DEFAULT_BASE_URL;
+if (baseUrl !== DEFAULT_BASE_URL) console.warn(`Using Banana API at ${baseUrl}`);
 
-const db = openDatabase(DB_FILE);
-const bananaApi = createBananaApi();
-const app = createApp({ db, bananaApi, sessionSecret, production });
+const bananaApi = createBananaApi({ baseUrl, timeoutMs: Number(process.env.BANANA_API_TIMEOUT_MS) || 5000 });
+const pool = createPuzzlePool({ fetchPuzzle: bananaApi.fetchPuzzle });
+const app = createApp({ bananaApi, pool });
 
 app.listen(PORT, () => {
-  console.log(`Banana game running at http://localhost:${PORT}`);
+  console.log(`Banana Brigade running at http://localhost:${PORT}`);
+  pool.warmUp(); // have puzzles ready before the first player asks
 });

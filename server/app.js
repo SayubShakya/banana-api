@@ -1,59 +1,61 @@
-// Builds the Express application. Kept separate from index.js so tests can create
-// an app with an in-memory database and a fake Banana API.
+// The Banana Brigade web server: serves the screens and gives them Banana API puzzles.
 //
-// Scaffolding written with Claude (Anthropic), Oct 2026; reviewed by Sayub Shakya.
+//   GET  /api/puzzle?purpose=deploy|respawn|crate   -> { puzzleId, image, purpose, source }
+//   POST /api/puzzle/answer  { puzzleId, answer }   -> { correct, solution, purpose }
+//   GET  /api/status                                -> { online, ready, reserve, ... }
+//
+// The browser never calls the Banana API itself: the server fetches the puzzle,
+// keeps the solution and only sends the picture, so the answer cannot be read in
+// the browser's developer tools.
+//
+// Written with help from a generative AI coding assistant; reviewed by Sayub Shakya.
 
 const path = require('node:path');
 const express = require('express');
-const session = require('express-session');
+const { createPuzzleStore } = require('./puzzles');
+const { createPuzzlePool } = require('./pool');
 
-const { createAuthRouter } = require('./routes/auth');
-const { createGameRouter } = require('./routes/game');
-const { createScoresRouter } = require('./routes/scores');
-const { createAdminRouter } = require('./routes/admin');
+const PURPOSES = ['deploy', 'respawn', 'crate'];
 
-const SESSION_COOKIE = 'banana.sid';
-
-function createApp({ db, bananaApi, sessionSecret, production = false }) {
+function createApp({ bananaApi, puzzleStore = createPuzzleStore(), pool = createPuzzlePool({ fetchPuzzle: bananaApi.fetchPuzzle }) }) {
   const app = express();
-  app.set('sessionCookieName', SESSION_COOKIE);
-  if (production) app.set('trust proxy', 1);
+  app.use(express.json({ limit: '2kb' }));
 
-  // Only JSON bodies are accepted. Together with SameSite cookies this blocks
-  // simple cross-site form posts (CSRF).
-  app.use(express.json({ limit: '10kb' }));
+  app.get('/api/puzzle', async (req, res) => {
+    const purpose = PURPOSES.includes(req.query.purpose) ? req.query.purpose : 'deploy';
+    try {
+      const { image, solution, source } = await pool.take();
+      const puzzleId = puzzleStore.add(solution, purpose);
+      res.set('Cache-Control', 'no-store');
+      res.json({ puzzleId, image, purpose, source });
+    } catch (err) {
+      console.error('Banana API error:', err.message);
+      res.status(502).json({ error: 'The Banana API is not responding. Try again in a moment.' });
+    }
+  });
 
-  app.use(session({
-    name: SESSION_COOKIE,
-    secret: sessionSecret,
-    resave: false,
-    saveUninitialized: false, // no cookie until the user logs in
-    cookie: {
-      httpOnly: true,         // JavaScript in the page cannot read it (protects against XSS theft)
-      sameSite: 'lax',        // not sent on cross-site POSTs (CSRF protection)
-      secure: production,     // HTTPS only in production
-      maxAge: 2 * 60 * 60 * 1000, // 2 hours
-    },
-  }));
+  app.post('/api/puzzle/answer', (req, res) => {
+    const { puzzleId, answer } = req.body ?? {};
+    if (typeof puzzleId !== 'string' || !Number.isInteger(answer)) {
+      return res.status(400).json({ error: 'Send { puzzleId, answer } with a whole-number answer' });
+    }
+    const result = puzzleStore.answer(puzzleId, answer);
+    if (!result) return res.status(404).json({ error: 'That puzzle has expired or was already answered' });
+    res.json(result);
+  });
 
-  app.use('/api/auth', createAuthRouter({ db }));
-  app.use('/api/game', createGameRouter({ db, bananaApi }));
-  app.use('/api/scores', createScoresRouter({ db }));
-  app.use('/api/admin', createAdminRouter({ db }));
+  app.get('/api/status', (req, res) => res.json(pool.status()));
 
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
-  // Last-resort error handler: log the detail, send a generic message.
   app.use((err, req, res, next) => {
-    if (err.type === 'entity.parse.failed') {
-      return res.status(400).json({ error: 'Request body is not valid JSON' });
-    }
+    if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Request body is not valid JSON' });
     console.error(err);
-    res.status(500).json({ error: 'Something went wrong on the server' });
+    res.status(500).json({ error: 'Something went wrong' });
   });
 
   return app;
 }
 
-module.exports = { createApp, SESSION_COOKIE };
+module.exports = { createApp };

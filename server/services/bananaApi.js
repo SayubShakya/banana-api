@@ -3,7 +3,7 @@
 // Every call to the external service goes through this one file, so if the API
 // changes (URL, format, field names) only this file needs updating.
 //
-// Scaffolding written with Claude (Anthropic), Oct 2026; reviewed by Sayub Shakya.
+// Written with help from a generative AI coding assistant; reviewed by Sayub Shakya.
 
 const DEFAULT_BASE_URL = 'https://marcconrad.com/uob/banana/api.php';
 
@@ -14,17 +14,20 @@ class BananaApiError extends Error {
   }
 }
 
-// Turns the raw response body into { imageUrl, solution }.
-// JSON looks like:  { "question": "https://.../x.png", "solution": 7 }
-// CSV looks like:   https://.../x.png,7
-function parsePuzzle(body, format) {
-  let imageUrl;
+// Turns the raw response body into { image, solution }.
+// `image` is something an <img> can show: the image URL, or a data: URL when the
+// API was asked for base64 (base64=yes sends the PNG itself, so the browser does
+// not need a second download from the image host).
+// JSON looks like:  { "question": "https://.../x.png" or "<base64 PNG>", "solution": 7 }
+// CSV looks like:   https://.../x.png,7   or   <base64 PNG>,7
+function parsePuzzle(body, format, base64 = false) {
+  let question;
   let solution;
 
   if (format === 'csv') {
     const lastComma = body.trim().lastIndexOf(',');
     if (lastComma === -1) throw new BananaApiError('CSV response has no comma');
-    imageUrl = body.slice(0, lastComma).trim();
+    question = body.slice(0, lastComma).trim();
     solution = Number(body.slice(lastComma + 1).trim());
   } else {
     let data;
@@ -33,36 +36,44 @@ function parsePuzzle(body, format) {
     } catch (err) {
       throw new BananaApiError('Response is not valid JSON', { cause: err });
     }
-    imageUrl = data.question;
+    question = data.question;
     solution = data.solution;
   }
 
-  if (typeof imageUrl !== 'string' || !/^https?:\/\//.test(imageUrl)) {
-    throw new BananaApiError('Response has no valid image URL');
+  if (typeof question !== 'string') throw new BananaApiError('Response has no question');
+  let image;
+  if (base64) {
+    if (!/^[A-Za-z0-9+/]+=*$/.test(question) || question.length < 100) throw new BananaApiError('Response has no valid base64 image');
+    image = `data:image/png;base64,${question}`;
+  } else {
+    if (!/^https?:\/\//.test(question)) throw new BananaApiError('Response has no valid image URL');
+    image = question;
   }
-  if (!Number.isInteger(solution)) {
-    throw new BananaApiError('Response has no valid integer solution');
+  // The puzzle hides a single digit.
+  if (!Number.isInteger(solution) || solution < 0 || solution > 9) {
+    throw new BananaApiError('Response has no valid digit solution');
   }
-  return { imageUrl, solution };
+  return { image, solution };
 }
 
 // fetchImpl is injectable so the tests can fake the network.
 function createBananaApi({
   baseUrl = DEFAULT_BASE_URL,
   format = 'json',
+  base64 = true,
   timeoutMs = 5000,
   retries = 1,
   fetchImpl = globalThis.fetch,
 } = {}) {
   async function fetchPuzzle() {
-    const url = `${baseUrl}?out=${format}`;
+    const url = `${baseUrl}?out=${format}&base64=${base64 ? 'yes' : 'no'}`;
     let lastError;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
         if (!res.ok) throw new BananaApiError(`Banana API returned HTTP ${res.status}`);
-        return parsePuzzle(await res.text(), format);
+        return parsePuzzle(await res.text(), format, base64);
       } catch (err) {
         lastError = err;
       }

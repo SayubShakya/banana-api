@@ -1,83 +1,84 @@
-# banana-api
+# Banana Brigade
 
-CIS046-3 Software for Enterprise, Assignment 1 (University of Bedfordshire). Author: Sayub Shakya.
+The user interface of a 2D jetpack shooter in the style of the classic doodle army games,
+built for CIS046-3 Software for Enterprise by **Sayub Shakya**. Every mode is unlocked with a
+puzzle from the [Banana API](https://marcconrad.com/uob/banana/doc.php) by Marc Conrad.
 
-A web game built with Node.js on top of the [Banana API](https://marcconrad.com/uob/banana/doc.php) by Marc Conrad.
-The project demonstrates four themes: version control, event-driven programming, interoperability and virtual identity.
+**Scope: UI only.** There is no gameplay. The battle screen shows the HUD over a posed
+battlefield; its buttons respond (switch weapon, reload, grenades, zoom) so the interface can be
+tried out, and the banana crate and respawn prompts open real Banana API puzzles.
 
-> **Game concept: to be decided.** `public/play.html` is a placeholder screen that proves the whole
-> flow works (login → puzzle → answer → score → leaderboard). It will be replaced by the real game.
+Design preview links open a screen directly: `#puzzle-deploy`, `#puzzle-respawn`, `#puzzle-crate`,
+`#battle-quick`, `#battle-team`, `#battle-down`, `#pause`, `#results-survival`, `#avatar`, `#controls`.
 
-## Requirements
+## Where the Banana API is used
 
-- Node.js 22 or later
-- npm
+| Moment | Puzzle | Reward |
+|---|---|---|
+| Pressing **Quick Play**, **Survival**, **Training** or **Multiplayer** | Deploy puzzle · 30 s · unlimited tries (new puzzle after a miss) | You drop into the match |
+| You go down | Respawn puzzle (press **B** or tap the message) · 15 s · one try | Instant respawn; in Survival it is your only revive |
+| You open a **banana crate** (press **E**) | Crate puzzle · 20 s · one try | Rocket Launcher, Sniper or Flamethrower, full health, +2 grenades; the crate refills after 25 s |
 
-## Setup
+How the integration follows the [API documentation](https://marcconrad.com/uob/banana/doc.php):
+
+- Each puzzle hides **one digit**, so answers are a 0–9 keypad ("Enter the missing digit", as in the official game).
+- The server calls `api.php?out=json&base64=yes`, which returns the PNG itself instead of a link. One request
+  instead of two, so the picture appears without waiting for the image host.
+- The server keeps **3 puzzles ready** (fetched in the background), so the puzzle screen opens instantly.
+- The documentation warns the service "may be discontinued without notice". The server keeps the last 25 puzzles as a
+  **reserve**; if the API stops answering, the game keeps working from the reserve and the menu shows
+  "Banana API offline". The status is also available at `GET /api/status`.
+- The browser never talks to the Banana API. The server keeps each solution and checks answers, so the
+  solution never reaches the browser; each puzzle can be answered once and expires after 5 minutes.
+
+## Screens
+
+- **Main menu**: logo, your soldier, puzzle record (solved, best streak, accuracy), four mode cards.
+- **Banana puzzle**: Banana API image, 30-second timer, keypad (or keys 0–9), feedback, stats.
+- **Battle HUD**: health and jetpack bars, timer, kill feed, score, weapon panel and buttons, banana crate prompt, respawn message, Tab scoreboard, touch sticks on phones.
+- **Pause**, **Results** (puzzles solved, accuracy, best streak, time), **Avatar** (headgear, uniform, skin, goggles, beard), **Controls**.
+
+## Run it
 
 ```bash
-npm install
-cp .env.example .env            # then set SESSION_SECRET
-npm start                       # http://localhost:3000
-npm run dev                     # same, but restarts when files change
-npm test                        # run the automated tests
-npm run create-admin -- <username> <password>   # create (or promote) an admin
+./run.sh            # installs packages on first run, then http://localhost:3100
+./run.sh --dev      # restarts when files change
+./run.sh --test     # automated tests
 ```
 
-## Architecture
+Demonstrate the error handling with a broken Banana API address:
 
-```
-Browser (HTML/CSS/JS)  ──HTTP + JSON──▶  Node.js / Express server  ──HTTPS + JSON──▶  Banana API
-  public/                                 server/                                    marcconrad.com
-                                            │
-                                            ▼
-                                          SQLite (data/banana.db)
+```bash
+BANANA_API_URL=https://marcconrad.com/uob/banana/does-not-exist.php ./run.sh
 ```
 
-The browser never talks to the Banana API directly. The server fetches each puzzle, keeps the
-solution in the player's session, and sends only the image URL to the browser. That way the answer
-cannot be read in the browser's developer tools, and scores are counted on the server.
+## Controls
+
+On the battle screen: click to use ammo · Q switch weapon · R reload · G grenade · F melee · Z zoom ·
+E open banana crate · B banana respawn · Tab scoreboard · Esc pause. Puzzles: keys 0–9 or the keypad.
+
+## API
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/puzzle?purpose=deploy\|respawn\|crate` | `{ puzzleId, image, purpose, source }` (no solution; `image` is a data URL; `source` is `live` or `reserve`) |
+| POST | `/api/puzzle/answer` | `{ puzzleId, answer }` → `{ correct, solution, purpose }`; each puzzle can be answered once |
+| GET | `/api/status` | `{ online, ready, reserve, lastError, lastSuccess }` |
 
 ## Project structure
 
 | Path | Purpose |
 |---|---|
-| `server/index.js` | Entry point: reads `.env`, opens the database, starts the server |
-| `server/app.js` | Express app: JSON parsing, session cookie settings, routes |
-| `server/services/bananaApi.js` | **All** calls to the Banana API (timeout, retry, JSON/CSV parsing) |
-| `server/routes/auth.js` | Register, login, logout, `/me` (bcrypt + sessions) |
-| `server/routes/game.js` | Start game, get puzzle, answer, skip, end game |
-| `server/routes/scores.js` | Leaderboard and personal score history |
-| `server/routes/admin.js` | Admin-only user list and score reset |
-| `server/middleware/auth.js` | `requireLogin` and `requireAdmin` guards |
-| `server/db/` | SQLite schema and all SQL queries |
-| `public/` | Pages, styles and browser JavaScript (`eventBus.js` = publish/subscribe) |
+| `server/services/bananaApi.js` | All calls to the Banana API (timeout, retry, JSON/CSV parsing) |
+| `server/pool.js` | Keeps puzzles ready and a reserve for when the Banana API is down |
+| `server/puzzles.js` | Keeps puzzle solutions on the server; one answer each; expiry |
+| `server/app.js` | Express routes and static files |
+| `public/js/eventBus.js` | Publish/subscribe event bus used by every game module |
+| `public/js/game/` | Screens: `main` (screen flow), `puzzle` (Banana puzzle screen), `hud` (battle HUD), `scene` (battlefield backdrop), `map`, `characters` (avatars), `config` |
 | `tests/` | Automated tests (`node --test`) |
-| `scripts/create-admin.js` | Command-line tool to create an admin |
 
-## REST API
-
-| Method | Path | Login | Description |
-|---|---|---|---|
-| POST | `/api/auth/register` | – | `{ username, password }` → creates account and logs in |
-| POST | `/api/auth/login` | – | `{ username, password }` → logs in |
-| POST | `/api/auth/logout` | – | Ends the session |
-| GET | `/api/auth/me` | – | Current user or `null` |
-| POST | `/api/game/start` | ✔ | Starts a new game |
-| GET | `/api/game/puzzle` | ✔ | `{ puzzleId, imageUrl }` (solution stays on the server) |
-| POST | `/api/game/answer` | ✔ | `{ puzzleId, answer }` → `{ correct, solution, game }` |
-| POST | `/api/game/skip` | ✔ | Gives up the current puzzle (e.g. timer ran out) |
-| POST | `/api/game/end` | ✔ | Saves the score |
-| GET | `/api/game/state` | ✔ | Current game or `null` |
-| GET | `/api/scores/leaderboard` | – | Top scores (`?limit=10`) |
-| GET | `/api/scores/me` | ✔ | Your last 10 games |
-| GET | `/api/admin/users` | admin | All users with stats |
-| DELETE | `/api/admin/users/:id/scores` | admin | Deletes a user's scores |
-
-## References and credits
+## Credits
 
 - Banana API by Marc Conrad: https://marcconrad.com/uob/banana/doc.php
-- Libraries: [Express](https://expressjs.com/), [express-session](https://github.com/expressjs/session),
-  [bcryptjs](https://github.com/dcodeIO/bcrypt.js), [better-sqlite3](https://github.com/WiseLibs/better-sqlite3)
-- The initial project scaffolding was written with help from Claude (Anthropic), October 2026.
-  Every file it produced says so in a comment at the top, as the assignment brief requires.
+- Gameplay and screen layout inspired by Mini Militia Classic; all art, sounds and names in this project are original.
+- Code written with help from a generative AI coding assistant; every file it produced says so in a comment at the top.

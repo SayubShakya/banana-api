@@ -1,24 +1,20 @@
 {
-  "name": "banana-game",
+  "name": "banana-brigade",
   "version": "0.1.0",
-  "description": "CIS046-3 Software for Enterprise - game built on the Banana API (marcconrad.com/uob/banana)",
+  "description": "Banana Brigade: a 2D jetpack shooter where Banana API puzzles deploy, revive and arm your soldier.",
   "main": "server/index.js",
-  "private": true,
   "scripts": {
-    "start": "node --env-file-if-exists=.env server/index.js",
-    "dev": "node --env-file-if-exists=.env --watch server/index.js",
-    "test": "node --test \"tests/**/*.test.js\"",
-    "create-admin": "node --env-file-if-exists=.env scripts/create-admin.js"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "engines": {
     "node": ">=22"
   },
   "author": "Sayub Shakya",
   "license": "UNLICENSED",
+  "private": true,
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
-    "express": "^5.3.0",
-    "express-session": "^1.19.0"
+    "express": "^5.3.0"
   }
 }
